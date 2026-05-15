@@ -75,7 +75,7 @@ def run_known_report_test(
     bot_runner: Callable[[str, NowAnchor], dict],
     idre_session: requests.Session,
     now_anchor: NowAnchor,
-    idre_base_url: str = "http://localhost:3000",
+    idre_base_url: str = "http://127.0.0.1:3000",
 ) -> TestResult:
     """Run a known-report test. Calls bot AND IDRE in parallel-equivalent fashion."""
     # Bot path
