@@ -3,10 +3,11 @@ from testing.v10_harness.measurements import Measurement, measure
 
 
 def test_measurement_records_latency():
+    # Use 50ms sleep to stay safely above Windows time.monotonic() ~16ms granularity
     with measure() as m:
-        time.sleep(0.01)
-    assert m.latency_ms >= 10
-    assert m.latency_ms < 100  # not absurdly slow
+        time.sleep(0.05)
+    assert m.latency_ms >= 30  # generous lower bound for clock resolution
+    assert m.latency_ms < 500  # not absurdly slow
 
 
 def test_measurement_records_tokens():

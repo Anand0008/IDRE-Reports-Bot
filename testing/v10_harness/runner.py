@@ -18,6 +18,7 @@ VALID_CATEGORIES = {"known-report", "derived-query"}
 
 @dataclass
 class TestRecord:
+    __test__ = False  # not a pytest test class
     id: str
     category: str
     prompt: str
@@ -49,6 +50,7 @@ class TestRecord:
 
 @dataclass
 class TestResult:
+    __test__ = False  # not a pytest test class
     record: TestRecord
     verdict: Verdict
     diffs: list[str]
