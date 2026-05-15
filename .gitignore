@@ -24,10 +24,15 @@ __pycache__/
 *.env.*
 !.env.example
 
-# Existing testing artifacts (large/data; will add v10_harness/ explicitly when created)
-testing/
+# Existing testing artifacts (large/data); allow v10_harness/ source but not its reports
+testing/*
+!testing/v10_harness/
+testing/v10_harness/reports/*
+testing/v10_harness/**/__pycache__/
 extract_docx.py
-scripts/
+scripts/*
+!scripts/build_knowledge/
+scripts/build_knowledge/__pycache__/
 
 # IDE
 .vscode/
