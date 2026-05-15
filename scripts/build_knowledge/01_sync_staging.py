@@ -24,15 +24,31 @@ def main(branch: str) -> int:
     sha = git_sha(branch)
     print(f"origin/{branch} is at {sha}")
 
-    # Check for local uncommitted changes — refuse to clobber
+    # Check for local uncommitted changes
     dirty = run(["git", "status", "--porcelain"])
+    stashed = False
     if dirty:
-        print("WARNING: local repo has uncommitted changes:")
+        print("Local repo has uncommitted changes; stashing before checkout:")
         print(dirty)
-        print("Pipeline will checkout origin/staging in detached HEAD.")
+        # Use -u to also stash untracked files (e.g., app/api/dev/)
+        run(["git", "stash", "push", "-u", "-m", f"pipeline-autostash-{sha}"])
+        stashed = True
 
-    run(["git", "checkout", "--detach", f"origin/{branch}"])
-    print(f"Checked out origin/{branch} ({sha}) in detached HEAD")
+    try:
+        run(["git", "checkout", "--detach", f"origin/{branch}"])
+        print(f"Checked out origin/{branch} ({sha}) in detached HEAD")
+    except subprocess.CalledProcessError:
+        if stashed:
+            print("Checkout failed; restoring stash", file=sys.stderr)
+            run(["git", "stash", "pop"])
+        raise
+    finally:
+        if stashed:
+            # Write a marker so a subsequent restore script can pop the stash later.
+            # We don't auto-pop here because the pipeline still reads the working tree.
+            marker = IDRE_REPO / ".pipeline_stash_marker"
+            marker.write_text(f"pipeline-autostash-{sha}\n")
+            print(f"Stash created; pop it manually with `git stash pop` after pipeline run", file=sys.stderr)
     return 0
 
 

@@ -99,7 +99,11 @@ def main(only: str | None) -> int:
             triple = call_gemini(source, api_key)
         except Exception as e:
             print(f"  FAIL: {e}", file=sys.stderr)
-            business_logic.append({"id": c["id"], "needs_review": True, "error": str(e)})
+            # Replace existing entry if present (failure or success)
+            business_logic = [b for b in business_logic if b.get("id") != c["id"]]
+            business_logic.append({"id": c["id"], "route_file": c["route_file"],
+                                   "needs_review": True, "error": str(e)})
+            write_json(out_path, {"idre_git_sha": git_sha(), "reports": business_logic})
             continue
         triple["id"] = c["id"]
         triple["route_file"] = c["route_file"]

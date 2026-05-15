@@ -49,8 +49,11 @@ def bot_runner():
         return runner
     elif which == "v10":
         sys.path.insert(0, "C:/Users/anand/Downloads/v10_reports_bot")
-        import app as v10_app
-        return lambda prompt, now: v10_app.run_query_v10(prompt, now)
+        from harness_entrypoint import run_query_v10
+
+        def runner(prompt: str, now):
+            return run_query_v10(prompt, now_anchor=now)
+        return runner
     else:
         raise RuntimeError(f"Unknown BOT={which}")
 
