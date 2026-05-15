@@ -1,0 +1,37 @@
+# Bot version directories live separately, not in this repo
+idre/
+testing/sql-compare/chrome-cdp-profile/
+testing/sql-compare/sql-captures/
+testing/sql-compare/__pycache__/
+
+# Generated test artifacts
+testing/v10_harness/reports/
+testing/ultimate_v2/
+testing/ultimate_comparison/
+
+# Knowledge pipeline outputs (versioned separately if needed)
+scripts/build_knowledge/__pycache__/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Secrets — be thorough; .env.txt has AWS/Stripe/SendGrid/CMS/GitHub credentials
+.env
+.env.*
+*.env
+*.env.*
+!.env.example
+
+# Existing testing artifacts (large/data; will add v10_harness/ explicitly when created)
+testing/
+extract_docx.py
+scripts/
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code session state
+.claude/
