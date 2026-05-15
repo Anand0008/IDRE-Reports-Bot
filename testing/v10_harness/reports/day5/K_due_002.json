@@ -1,0 +1,26 @@
+{
+  "id": "K_due_002",
+  "category": "known-report",
+  "verdict": "FAIL",
+  "diffs": [
+    "Path data.cases[*].caseId: bot has 36 values, expected 0 values; sets differ"
+  ],
+  "bot_measurement": {
+    "latency_ms": 8875.0,
+    "tokens": {
+      "prompt": 0,
+      "completion": 0,
+      "total": 0
+    },
+    "llm_calls": 0
+  },
+  "harness_measurement": {
+    "latency_ms": 250.0,
+    "tokens": {
+      "prompt": 0,
+      "completion": 0,
+      "total": 0
+    },
+    "llm_calls": 0
+  }
+}

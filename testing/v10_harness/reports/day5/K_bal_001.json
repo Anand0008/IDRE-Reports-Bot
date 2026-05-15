@@ -1,0 +1,27 @@
+{
+  "id": "K_bal_001",
+  "category": "known-report",
+  "verdict": "FAIL",
+  "diffs": [
+    "Path data.totalCount: bot=[None] expected=[]",
+    "Path data.totalBalance: bot=[None] expected=[]"
+  ],
+  "bot_measurement": {
+    "latency_ms": 12015.0,
+    "tokens": {
+      "prompt": 0,
+      "completion": 0,
+      "total": 0
+    },
+    "llm_calls": 0
+  },
+  "harness_measurement": {
+    "latency_ms": 188.0,
+    "tokens": {
+      "prompt": 0,
+      "completion": 0,
+      "total": 0
+    },
+    "llm_calls": 0
+  }
+}

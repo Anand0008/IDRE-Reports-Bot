@@ -1,0 +1,27 @@
+{
+  "id": "K_payouts_001",
+  "category": "known-report",
+  "verdict": "FAIL",
+  "diffs": [
+    "Path data.totalCount: bot=[] expected=[None]",
+    "Path data.totalAmount: bot=[] expected=[None]"
+  ],
+  "bot_measurement": {
+    "latency_ms": 372172.0,
+    "tokens": {
+      "prompt": 0,
+      "completion": 0,
+      "total": 0
+    },
+    "llm_calls": 0
+  },
+  "harness_measurement": {
+    "latency_ms": 16640.0,
+    "tokens": {
+      "prompt": 0,
+      "completion": 0,
+      "total": 0
+    },
+    "llm_calls": 0
+  }
+}
