@@ -42,7 +42,7 @@ def read_with_deps(report: dict) -> str:
 def call_gemini(source: str, api_key: str) -> dict:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel(
-        "gemini-2.5-pro-preview",
+        "gemini-2.5-pro",
         system_instruction=SYSTEM_PROMPT,
     )
     resp = model.generate_content(source, generation_config={"temperature": 0.1, "max_output_tokens": 8000})
