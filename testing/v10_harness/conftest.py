@@ -33,7 +33,12 @@ def staging_engine() -> Engine:
 def idre_session() -> requests.Session:
     """Authenticated session against localhost:3000 IDRE."""
     s = requests.Session()
-    r = s.get("http://localhost:3000/api/dev/auto-login", allow_redirects=True, timeout=30)
+    try:
+        r = s.get("http://localhost:3000/api/dev/auto-login", allow_redirects=True, timeout=30)
+    except requests.exceptions.ConnectionError as e:
+        pytest.skip(f"IDRE local server not reachable: connection refused ({e.__class__.__name__})")
+    except requests.exceptions.Timeout:
+        pytest.skip("IDRE local server not reachable: timeout")
     if r.status_code >= 400:
         pytest.skip(f"IDRE local server not reachable: HTTP {r.status_code}")
     return s
