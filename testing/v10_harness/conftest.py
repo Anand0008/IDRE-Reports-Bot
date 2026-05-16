@@ -6,6 +6,9 @@ import pytest
 import requests
 from sqlalchemy.engine import Engine
 
+# V10: bypass production row cap in tests
+os.environ.setdefault("V10_DISABLE_ROW_CAP", "1")
+
 # Make V8/V10 bot importable from harness
 V8_BOT = Path("C:/Users/anand/Downloads/v8_reports_bot")
 V10_BOT = Path("C:/Users/anand/Downloads/v10_reports_bot")
