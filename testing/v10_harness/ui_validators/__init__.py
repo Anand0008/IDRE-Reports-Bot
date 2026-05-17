@@ -15,3 +15,7 @@ def get(name: str):
     """Look up a validator by name. Raises KeyError if not registered."""
     cls = REGISTRY[name]
     return cls()
+
+
+# Import side-effects register each validator in REGISTRY
+from . import dashboard_stats  # noqa: E402,F401
