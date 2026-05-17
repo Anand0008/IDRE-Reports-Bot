@@ -20,6 +20,10 @@ if not os.environ.get("V10_USE_STAGING"):
     os.environ["DB_PASSWORD"] = "idrelocal"
     os.environ["DB_SSL_CA"] = "__nonexistent_disable_ssl__"
 
+# Disable the clarification gate so automated tests don't get paused on ambiguity
+# (e.g., 'payment' triggers ambiguous_payment_type flag at 35% > 30% default).
+os.environ.setdefault("V10_AMBIGUITY_THRESHOLD", "1.0")
+
 import json
 import sys
 from pathlib import Path

@@ -71,6 +71,8 @@ class TestResult:
             "diffs": self.diffs,
             "bot_measurement": self.bot_measurement,
             "harness_measurement": self.harness_measurement,
+            "bot_payload": self.bot_payload,
+            "expected_payload": self.expected_payload,
         }
 
 
@@ -179,6 +181,13 @@ def run_derived_ui_test(
     with measure() as bot_m:
         bot_raw = bot_runner(record.prompt, now_anchor)
 
+    # Capture raw bot response for debugging
+    bot_raw_summary = {
+        "sql": (bot_raw.get("sql") or "")[:500] if isinstance(bot_raw, dict) else None,
+        "data_preview": str(bot_raw.get("data"))[:300] if isinstance(bot_raw, dict) else None,
+        "row_count": bot_raw.get("row_count") if isinstance(bot_raw, dict) else None,
+    }
+
     # Reduce bot result to {key: number} dict, matching validator's shape.
     # Handles several bot output shapes:
     #   data: [{"col": N}]         -> single scalar (most common)
@@ -244,6 +253,6 @@ def run_derived_ui_test(
         diffs=cmp.diff,
         bot_measurement=bot_m.to_dict(),
         harness_measurement=ui_m.to_dict(),
-        bot_payload=bot_dict,
+        bot_payload={"reduced": bot_dict, "raw": bot_raw_summary},
         expected_payload=ui_dict,
     )
