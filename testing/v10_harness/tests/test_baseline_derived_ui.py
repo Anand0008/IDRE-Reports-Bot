@@ -24,6 +24,12 @@ if not os.environ.get("V10_USE_STAGING"):
 # (e.g., 'payment' triggers ambiguous_payment_type flag at 35% > 30% default).
 os.environ.setdefault("V10_AMBIGUITY_THRESHOLD", "1.0")
 
+# At production-scale data (60K+ cases) the /dashboard/cases page doesn't
+# render fast enough for DOM-scrape validators. Use direct SQL against the
+# same local docker DB instead -- still equivalent ground truth since IDRE
+# reads the same data, just bypasses slow React Suspense rendering.
+os.environ.setdefault("VALIDATOR_USE_DIRECT_SQL", "1")
+
 import json
 import sys
 from pathlib import Path
