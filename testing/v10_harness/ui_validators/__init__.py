@@ -22,3 +22,4 @@ from . import dashboard_stats  # noqa: E402,F401
 from . import case_status_filter  # noqa: E402,F401
 from . import payment_lifecycle  # noqa: E402,F401
 from . import due_dates_filter  # noqa: E402,F401
+from . import dom_scrape  # noqa: E402,F401
