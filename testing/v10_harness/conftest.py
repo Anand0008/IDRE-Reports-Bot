@@ -101,3 +101,14 @@ def playwright_page(playwright_browser, idre_session):
         yield page
     finally:
         ctx.close()
+
+
+@pytest.fixture(scope="session")
+def derived_dom_preflight():
+    """Suite-gating fixture for derived-dom tests. Skips suite on any FAIL."""
+    from testing.v10_harness.preflight import run_all, format_report
+    overall, results = run_all()
+    if not overall:
+        report = format_report(results)
+        pytest.skip(f"derived-dom preflight failed:\n{report}")
+    yield results
