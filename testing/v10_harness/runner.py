@@ -179,25 +179,48 @@ def run_derived_ui_test(
     with measure() as bot_m:
         bot_raw = bot_runner(record.prompt, now_anchor)
 
-    # Reduce bot result to {key: number} dict, matching validator's shape
+    # Reduce bot result to {key: number} dict, matching validator's shape.
+    # Handles several bot output shapes:
+    #   data: [{"col": N}]         -> single scalar (most common)
+    #   data: [{"k1": v1, ...}]    -> multi-key dict from first row
+    #   data: {key: scalar}        -> already-shaped dict
+    #   data: {key: [...]}         -> bot LISTED items; reduce list to count
+    #   data: [{...}, {...}, ...]  -> bot returned multiple rows; for count-style
+    #                                 single-key tests, fall back to len(rows)
     bot_dict: dict[str, Any] = {}
     data = bot_raw.get("data") if isinstance(bot_raw, dict) else bot_raw
     if isinstance(data, list) and data and isinstance(data[0], dict):
         first = data[0]
         if len(record.bot_must_return_keys) == 1:
-            # Single-key case: take first scalar value from the first row
             only_key = record.bot_must_return_keys[0]
             if only_key in first:
                 bot_dict[only_key] = first[only_key]
             else:
-                vals = list(first.values())
-                bot_dict[only_key] = vals[0] if vals else None
+                # If multiple rows, bot LISTED items — count them
+                # (single row with no matching key: take its first scalar)
+                if len(data) > 1:
+                    bot_dict[only_key] = len(data)
+                else:
+                    vals = list(first.values())
+                    bot_dict[only_key] = vals[0] if vals else None
         else:
             for k in record.bot_must_return_keys:
                 bot_dict[k] = first.get(k)
     elif isinstance(data, dict):
+        # Try direct key lookup first
         for k in record.bot_must_return_keys:
             bot_dict[k] = data.get(k)
+        # If single-key request got None but data has a single list value,
+        # treat that list's length as the count (bot listed instead of counted).
+        if len(record.bot_must_return_keys) == 1:
+            only_key = record.bot_must_return_keys[0]
+            if bot_dict.get(only_key) is None:
+                list_values = [v for v in data.values() if isinstance(v, list)]
+                if len(list_values) == 1:
+                    bot_dict[only_key] = len(list_values[0])
+    elif isinstance(data, list) and len(record.bot_must_return_keys) == 1:
+        # Bare list response: use length as the count
+        bot_dict[record.bot_must_return_keys[0]] = len(data)
 
     if not record.validator:
         return TestResult(
