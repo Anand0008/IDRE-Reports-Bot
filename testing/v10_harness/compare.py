@@ -46,21 +46,43 @@ def compare_row_sets(bot: list[dict], expected: list[dict]) -> CompareResult:
     return CompareResult(Verdict.FAIL, diff)
 
 
+def _try_numeric(v: Any) -> tuple[bool, float | None]:
+    """Best-effort numeric coercion. Returns (succeeded, value)."""
+    if v is None:
+        return False, None
+    if isinstance(v, bool):
+        return False, None  # don't treat True/False as 1/0 for aggregate comparison
+    if isinstance(v, (int, float)):
+        return True, float(v)
+    if isinstance(v, str):
+        s = v.strip().replace(",", "")
+        if s == "":
+            return False, None
+        try:
+            return True, float(s)
+        except ValueError:
+            return False, None
+    return False, None
+
+
 def compare_aggregates(
     bot: dict[str, Any],
     expected: dict[str, Any],
     float_tolerance: float = 0.0,
 ) -> CompareResult:
-    """Compare aggregate dicts. Ints exact; floats within tolerance."""
+    """Compare aggregate dicts. Numeric values (incl numeric strings) compared
+    with tolerance; non-numeric values compared strictly."""
     diff = []
     for key, exp_val in expected.items():
         if key not in bot:
             diff.append(f"Missing key: {key}")
             continue
         bot_val = bot[key]
-        if isinstance(exp_val, float) or isinstance(bot_val, float):
-            if abs(float(bot_val) - float(exp_val)) > float_tolerance:
-                diff.append(f"{key}: bot={bot_val} expected={exp_val} (tol={float_tolerance})")
+        bot_ok, bot_num = _try_numeric(bot_val)
+        exp_ok, exp_num = _try_numeric(exp_val)
+        if bot_ok and exp_ok:
+            if abs(bot_num - exp_num) > float_tolerance:
+                diff.append(f"{key}: bot={bot_val!r} expected={exp_val!r} (tol={float_tolerance})")
         else:
             if bot_val != exp_val:
                 diff.append(f"{key}: bot={bot_val!r} expected={exp_val!r}")

@@ -3,9 +3,24 @@
 Bot generates SQL via V10 pipeline; validator scrapes IDRE UI/API; compare.
 Bot selection via env var BOT=v10 (default) or BOT=v8.
 Skips if IDRE local server isn't reachable (handled by playwright_page fixture).
+
+DB ALIGNMENT: bot would normally read staging RDS, but validators read local
+docker (`idre` DB). We override DB_* env vars below so the bot reads local
+docker too — both sides see the same dev-data substrate (47 users / 36 cases
+/ 43 payments). Must happen BEFORE any bot import (pydantic_settings caches
+via @lru_cache). To run against staging instead, set V10_USE_STAGING=1.
 """
-import json
 import os
+
+if not os.environ.get("V10_USE_STAGING"):
+    os.environ["DB_HOST"] = "127.0.0.1"
+    os.environ["DB_PORT"] = "3306"
+    os.environ["DB_NAME"] = "idre"
+    os.environ["DB_USER"] = "root"
+    os.environ["DB_PASSWORD"] = "idrelocal"
+    os.environ["DB_SSL_CA"] = "__nonexistent_disable_ssl__"
+
+import json
 import sys
 from pathlib import Path
 
