@@ -13,7 +13,7 @@ from testing.v10_harness.compare import (
 from testing.v10_harness.measurements import Measurement, measure
 
 
-VALID_CATEGORIES = {"known-report", "derived-query", "derived-ui"}
+VALID_CATEGORIES = {"known-report", "derived-query", "derived-ui", "derived-dom"}
 
 
 @dataclass
@@ -31,6 +31,7 @@ class TestRecord:
     notes: str = ""
     validator: str | None = None  # derived-ui: name of UI validator to invoke
     validator_params: dict = field(default_factory=dict)  # derived-ui params
+    result_type: str = "count"  # NEW: "count" | "rows" -- governs dom_lookup behavior
 
     @classmethod
     def from_dict(cls, d: dict) -> "TestRecord":
@@ -49,6 +50,7 @@ class TestRecord:
             notes=d.get("notes", ""),
             validator=d.get("validator"),
             validator_params=d.get("validator_params", {}),
+            result_type=d.get("result_type", "count"),
         )
 
 
