@@ -55,13 +55,23 @@ def _try_numeric(v: Any) -> tuple[bool, float | None]:
     if isinstance(v, (int, float)):
         return True, float(v)
     if isinstance(v, str):
-        s = v.strip().replace(",", "")
+        # Strip whitespace, commas, currency, percent — same set parse_number uses
+        s = v.strip().lstrip("$").rstrip("%").replace(",", "").replace("$", "").strip()
         if s == "":
             return False, None
         try:
             return True, float(s)
         except ValueError:
-            return False, None
+            pass
+        # Last-ditch: extract the first signed numeric substring ("44 days" -> 44)
+        import re as _re
+        m = _re.match(r"\s*(-?\d+(?:\.\d+)?)", s)
+        if m:
+            try:
+                return True, float(m.group(1))
+            except ValueError:
+                pass
+        return False, None
     return False, None
 
 
