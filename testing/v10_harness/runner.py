@@ -13,7 +13,7 @@ from testing.v10_harness.compare import (
 from testing.v10_harness.measurements import Measurement, measure
 
 
-VALID_CATEGORIES = {"known-report", "derived-query"}
+VALID_CATEGORIES = {"known-report", "derived-query", "derived-ui"}
 
 
 @dataclass
@@ -29,6 +29,8 @@ class TestRecord:
     bot_must_return_keys: list[str] = field(default_factory=list)
     temporality: str = "variant"  # "variant" | "stable"
     notes: str = ""
+    validator: str | None = None  # derived-ui: name of UI validator to invoke
+    validator_params: dict = field(default_factory=dict)  # derived-ui params
 
     @classmethod
     def from_dict(cls, d: dict) -> "TestRecord":
@@ -45,6 +47,8 @@ class TestRecord:
             bot_must_return_keys=d.get("bot_must_return_keys", []),
             temporality=d.get("temporality", "variant"),
             notes=d.get("notes", ""),
+            validator=d.get("validator"),
+            validator_params=d.get("validator_params", {}),
         )
 
 
@@ -155,4 +159,68 @@ def run_derived_query_test(
         harness_measurement=harness_m.to_dict(),
         bot_payload=bot_result,
         expected_payload=expected,
+    )
+
+
+def run_derived_ui_test(
+    record: TestRecord,
+    bot_runner: Callable[[str, NowAnchor], dict],
+    page,
+    now_anchor: NowAnchor,
+) -> TestResult:
+    """Run a derived-ui test.
+
+    Bot generates SQL & executes via its own pipeline → returns rows.
+    Validator drives IDRE's UI/API via Playwright → returns scalar/dict.
+    Compare exact (float tolerance 0.01).
+    """
+    from testing.v10_harness.ui_validators import get as get_validator
+
+    with measure() as bot_m:
+        bot_raw = bot_runner(record.prompt, now_anchor)
+
+    # Reduce bot result to {key: number} dict, matching validator's shape
+    bot_dict: dict[str, Any] = {}
+    data = bot_raw.get("data") if isinstance(bot_raw, dict) else bot_raw
+    if isinstance(data, list) and data and isinstance(data[0], dict):
+        first = data[0]
+        if len(record.bot_must_return_keys) == 1:
+            # Single-key case: take first scalar value from the first row
+            only_key = record.bot_must_return_keys[0]
+            if only_key in first:
+                bot_dict[only_key] = first[only_key]
+            else:
+                vals = list(first.values())
+                bot_dict[only_key] = vals[0] if vals else None
+        else:
+            for k in record.bot_must_return_keys:
+                bot_dict[k] = first.get(k)
+    elif isinstance(data, dict):
+        for k in record.bot_must_return_keys:
+            bot_dict[k] = data.get(k)
+
+    if not record.validator:
+        return TestResult(
+            record=record,
+            verdict=Verdict.FAIL,
+            diffs=["derived-ui record missing 'validator' field"],
+            bot_measurement=bot_m.to_dict(),
+            harness_measurement={},
+            bot_payload=bot_dict,
+            expected_payload=None,
+        )
+
+    with measure() as ui_m:
+        validator = get_validator(record.validator)
+        ui_dict = validator.extract(page, record.validator_params)
+
+    cmp = compare_aggregates(bot_dict, ui_dict, float_tolerance=0.01)
+    return TestResult(
+        record=record,
+        verdict=cmp.verdict,
+        diffs=cmp.diff,
+        bot_measurement=bot_m.to_dict(),
+        harness_measurement=ui_m.to_dict(),
+        bot_payload=bot_dict,
+        expected_payload=ui_dict,
     )
