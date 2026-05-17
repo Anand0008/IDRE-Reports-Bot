@@ -57,10 +57,17 @@ def now_anchor(staging_engine: Engine):
 
 @pytest.fixture(scope="session")
 def playwright_browser():
-    """Session-scoped headless Chromium for derived-ui tests."""
+    """Session-scoped Chromium for derived-ui tests.
+
+    Env vars:
+      PLAYWRIGHT_HEADED=1     launch with browser visible (default: headless)
+      PLAYWRIGHT_SLOWMO_MS=N  delay each action by N ms (for visibility, e.g. 300)
+    """
     from playwright.sync_api import sync_playwright
+    headed = os.environ.get("PLAYWRIGHT_HEADED", "").lower() in ("1", "true", "yes")
+    slowmo = int(os.environ.get("PLAYWRIGHT_SLOWMO_MS", "0") or 0)
     p = sync_playwright().start()
-    browser = p.chromium.launch(headless=True)
+    browser = p.chromium.launch(headless=not headed, slow_mo=slowmo)
     try:
         yield browser
     finally:
