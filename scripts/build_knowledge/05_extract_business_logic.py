@@ -45,7 +45,7 @@ def call_gemini(source: str, api_key: str) -> dict:
         "gemini-2.5-pro",
         system_instruction=SYSTEM_PROMPT,
     )
-    resp = model.generate_content(source, generation_config={"temperature": 0.1, "max_output_tokens": 8000})
+    resp = model.generate_content(source, generation_config={"temperature": 0.1, "max_output_tokens": 32000})
     text = resp.text.strip()
     if text.startswith("```"):
         text = text.split("```", 2)[1]

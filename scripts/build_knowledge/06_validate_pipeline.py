@@ -4,6 +4,7 @@ and (optionally) sql_equivalent executes without error against staging RDS.
 from __future__ import annotations
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from common import PENDING_DIR, write_json, git_sha, utc_iso, file_sha256
@@ -55,9 +56,18 @@ def main(execute_sql: bool) -> int:
                 sql = r.get("sql_equivalent", "")
                 if not sql:
                     continue
+                # Strip block comments, trailing line comments, then trailing semicolons/whitespace
+                # so the wrapper SELECT * FROM (<sql>) AS _v LIMIT 1 doesn't break on /* */ or -- or ;
+                cleaned = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
+                cleaned = re.sub(r"--[^\n]*", "", cleaned)
+                cleaned = cleaned.strip().rstrip(";").strip()
+                if not cleaned:
+                    summary["checks"].append({"name": f"sql_executes:{r['id']}", "ok": False, "err": "empty after strip"})
+                    summary["ok"] = False
+                    continue
                 try:
                     # Wrap in LIMIT-bounded subquery to keep validation fast
-                    conn.execute(text(f"SELECT * FROM ({sql}) AS _v LIMIT 1"))
+                    conn.execute(text(f"SELECT * FROM ({cleaned}) AS _v LIMIT 1"))
                     summary["checks"].append({"name": f"sql_executes:{r['id']}", "ok": True})
                 except Exception as e:
                     summary["checks"].append({"name": f"sql_executes:{r['id']}", "ok": False, "err": str(e)[:300]})
