@@ -40,3 +40,8 @@ scripts/build_knowledge/__pycache__/
 
 # Claude Code session state
 .claude/
+
+# Database snapshots (contain real client PHI/PII; never commit)
+.snapshots/
+*.sql
+*.sql.gz
