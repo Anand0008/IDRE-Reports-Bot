@@ -1,49 +1,103 @@
-# Phase A — Partial Progress (handoff to next session)
+# Phase A — Partial Progress v2 (handoff to next session)
 
-**Date:** 2026-05-17
-**Continuation of:** `2026-05-17-day9-status.md` (Phase A in that doc's plan)
-**Branch state:** committed to `main` on `Anand0008/IDRE-Reports-Bot`
+**Date:** 2026-05-17 (afternoon slice)
+**Continuation of:** `2026-05-17-day9-status.md`
+**Latest commit:** TBD (after this file is committed)
+**Branch state:** `Anand0008/IDRE-Reports-Bot` main
+
+## Trajectory of `sql_executes` pass rate
+
+| State | Pass | Note |
+|---|---|---|
+| Initial (Day 9 end) | 0/17 | All 17 fail validation |
+| After validator wrap fix | 0/17 | Real errors exposed, none of them runtime errors |
+| After backticked table-casing fix | 1/17 | `recent-activity` |
+| After bare-identifier table-casing fix | 1/17 (no change in counts; different errors revealed) | |
+| After stricter Gemini prompt + drop exports | **2/13** | `recent-activity`, `auditing/daily-transactions` |
 
 ## What got done this slice
 
-1. **Fixed the validator wrap bug** in `scripts/build_knowledge/06_validate_pipeline.py`:
-   - Strips `/* ... */` block comments, `-- line` comments, and trailing `;`/whitespace before wrapping SQL in `SELECT * FROM (<sql>) AS _v LIMIT 1`.
-   - Re-running validation exposed the *real* errors (previously hidden by wrap failures).
+1. **Validator wrap (`06_validate_pipeline.py`)**: now strips block comments `/*...*/`, line comments `--...`, and trailing `;`/whitespace before wrapping SQL in the validator subquery.
 
-2. **Created `scripts/build_knowledge/fix_table_casing.py`** — a one-shot script that reads `schema_catalog.json`, builds a `PascalCaseModel → mysql_table_name` map (51 entries), and rewrites *backticked* references in every `business_logic.json` `sql_equivalent`. Updated 15 reports.
+2. **`scripts/build_knowledge/fix_table_casing.py`** (extended): rewrites BOTH backticked PascalCase model refs AND bare PascalCase refs in `FROM/JOIN/UPDATE/INTO` position. 51 entries in the `model → table_name` map from `schema_catalog.json`.
 
-## Current state of `business_logic.json` (after both fixes)
+3. **`05_extract_business_logic.py` SYSTEM_PROMPT rewritten** with hard constraints:
+   - One single SELECT only — no `SET @var; SELECT`
+   - Use MySQL table names (lowercase from `@@map`), NOT Prisma PascalCase model names
+   - No `${var}` template literals, no `:param` placeholders, no `?` placeholders
+   - If a table/column can't be confirmed, set `needs_review: true` rather than guess
+   - Backtick `case` (reserved word)
 
-**1 of 17 reports executes** against staging RDS: `recent-activity`. The other 16 fail.
+4. **Dropped 5 export-infra entries** (`export`, `exports`, `exports/[exportId]`, `exports/[exportId]/download`, `exports/[exportId]/retry`) — these are export-management endpoints, not reports.
 
-## Remaining failure breakdown
+5. **Re-prompted Gemini** for the 12 failing reports with the stricter system prompt. All re-converted. Validation now shows 2 OK + 11 with REAL errors (no more cosmetic issues).
 
-| Failure pattern | Reports | Fix |
+## What's actually broken in the remaining 11
+
+All failures are now one of two classes — both fixable mechanically:
+
+### Class 1: Wrong table names (5 reports)
+
+Gemini invented tables that don't exist in `schema_catalog.json`. The real Prisma model uses a different name (often with a `case_` prefix or plural).
+
+| Hallucinated name | Real name | Reports affected |
 |---|---|---|
-| Bare (non-backticked) PascalCase identifier | `idre-payouts` (`Payment`), `dashboard-stats` (`Payment`), `due-dates` (`Party`), `unpaid-disputes` (`PaymentAllocation`) | Extend `fix_table_casing.py` to handle bare identifiers — but **carefully**: it must NOT rewrite column names that happen to share the PascalCase. Use word-boundary regex matched against tokens that appear in FROM/JOIN/UPDATE position only. ~30 min careful work. |
-| Multi-statement `SET @var; SELECT ...` | `team-performance`, `case-analytics`, `cms-payments` | Re-prompt Gemini with stricter `05_extract_business_logic.py` SYSTEM_PROMPT: "ONE SELECT only. NO SET @var. NO `${var}` template-literal placeholders. NO `?` placeholders. If you cannot translate a helper function, set `needs_review: true` and explain." Run with `--only <id>` for each. |
-| Schema reference doesn't exist on staging | `due-dates/summary` (`form_response`), `exports` (`mfe.fileUrl` column), `exports/[exportId]*` (`:exportId` SQLAlchemy bind param) | Hand-investigate: `due-dates/summary` and `exports/*` may be NEW staging routes that reference tables/columns this script's schema catalog didn't pick up (or that don't exist yet on staging RDS). Either fix manually or mark `needs_review: true`. |
-| Generic 1064 syntax (unclassified) | `auditing/daily-transactions`, `case-balance`, `outstanding-payments`, `auditing/daily-funds`, `exports/[exportId]/retry` | Read each SQL, identify root cause. Likely a mix of JSON-function misuse and unmatched parens. |
+| `party` | `case_party` (model `CaseParty`) | `due-dates`, `auditing/daily-funds` |
+| `dispute_line_item` | `dispute_line_items` (plural) | `idre-payouts`, `outstanding-payments` |
+| `installment` | doesn't exist on staging — feature removed? | `due-dates/summary` |
 
-## Verbatim next-session prompt
+### Class 2: Wrong column casing (6 reports)
 
-> Continuing V10 reports bot Phase A. Last session got 1/17 executing.
-> Read `docs/superpowers/reports/2026-05-17-phase-a-partial.md` first, then:
+**Critical finding:** Prisma column names are camelCase in MySQL too, not snake_case. Gemini's intuition was wrong. Examples of generated-wrong → actual:
+- `dispute_reference_number` → `disputeReferenceNumber`
+- `created_at` → `createdAt`
+- `report_type` → `reportType`
+- `type_of_dispute` → `typeOfDispute`
+- `closedAt` → not in schema (may be `statusChangedAt` or similar)
+
+This is a UNIVERSAL issue — every Gemini-generated SQL likely has at least one snake_case column ref that needs flipping.
+
+## Verbatim prompt for next session
+
+> Continuing V10 reports bot Phase A. We're at 2/13 sql_executes OK.
+> Read `docs/superpowers/reports/2026-05-17-phase-a-partial.md` first.
 >
-> 1. Extend `scripts/build_knowledge/fix_table_casing.py` to safely rewrite bare PascalCase identifiers in FROM/JOIN clauses only. Test by running it then `06_validate_pipeline.py --execute-sql`. Should recover ~4 reports.
-> 2. Update `05_extract_business_logic.py` SYSTEM_PROMPT with the stricter constraints above; re-prompt the 3 multi-statement reports with `--only`.
-> 3. Hand-fix the remaining failures by reading the actual `route.ts` side-by-side with the generated SQL.
-> 4. Target: 17/17 OK. Tag `knowledge-validated` on GitHub when done. Promote `v10_pending` → `v10` atomically.
+> Concrete next steps (each ~15-30 min):
 >
-> Then Phase B: Day 10 derived-query test set (see `2026-05-15-v10-reports-bot-plan.md` Day 10).
+> **Step A1 — Extend `fix_table_casing.py` with an explicit alias map** for hallucinated tables:
+> ```python
+> TABLE_ALIASES = {
+>     "party": "case_party",
+>     "dispute_line_item": "dispute_line_items",
+>     # add more as discovered
+> }
+> ```
+> Apply in FROM/JOIN/INTO/UPDATE position only, with word-boundary regex. Re-validate.
+>
+> **Step A2 — Build a `fix_column_casing.py` script** that reads `schema_catalog.json`, builds a `snake_case_name → camelCaseName` map from every model's columns, and rewrites references in `<alias>.<column>` form in every `business_logic.json` `sql_equivalent`. Test by validating against staging.
+>
+> **Step A3 — For `due-dates/summary`** (`installment` table): inspect `app/api/reports/due-dates/summary/route.ts` on staging. If the feature was removed, drop the entry from `business_logic.json`. If renamed, update.
+>
+> **Step A4 — Validate**, target 13/13 OK (or `needs_review:true` with clear notes for any genuinely-untranslatable). Tag `knowledge-validated` on GitHub. Promote `v10_pending → v10` atomically (`scripts/build_knowledge/run_all.py` does this when validation passes, or do it manually with `mv`).
+>
+> **Then Phase B**: Day 10 derived-query test set (see `2026-05-15-v10-reports-bot-plan.md` Day 10).
 
-## Files changed in this slice
+## Known-report path is UNAFFECTED
 
-- `scripts/build_knowledge/06_validate_pipeline.py` (validator wrap fix)
-- `scripts/build_knowledge/fix_table_casing.py` (new — backticked-only)
-- `v10_reports_bot/knowledge/v10_pending/business_logic.json` (15 entries rewritten)
-- `v10_reports_bot/knowledge/v10_pending/manifest.json` (new validation result: 1/17 OK)
+15/15 byte-equal PASS still holds. `day9-complete` tag still valid. This whole investigation is about the *derived-query* path's knowledge layer, which fires only when the LLM falls through to SQL generation.
 
-## What is NOT broken
+## Files changed this slice
 
-The 15/15 known-report baseline still holds — known path doesn't depend on `business_logic.json`. Day 9 `day9-complete` tag is still valid.
+- `scripts/build_knowledge/06_validate_pipeline.py` (wrap fix + import re)
+- `scripts/build_knowledge/05_extract_business_logic.py` (stricter system prompt)
+- `scripts/build_knowledge/fix_table_casing.py` (added bare-identifier rewrite in FROM/JOIN/UPDATE/INTO position)
+- `v10_reports_bot/knowledge/v10_pending/business_logic.json` (12 reports re-generated under stricter prompt; 5 export entries dropped)
+- `v10_reports_bot/knowledge/v10_pending/manifest.json` (validation: 2/13 OK)
+
+## Session end notes
+
+- IDRE local server: still running on `127.0.0.1:3000`. Don't kill until next session.
+- Docker `idre-mysql`: still running.
+- Working tree of IDRE clone: on `main` + dev tweaks intact (auto-login route preserved).
+- V10 bot working tree (`v10_reports_bot/`): unchanged source; only `knowledge/v10_pending/` artifacts modified.
+- Push credentials: PAT for `Anand0008/IDRE-Reports-Bot` was passed via shell history — rotate when convenient.

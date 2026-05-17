@@ -12,18 +12,30 @@ import google.generativeai as genai
 from common import IDRE_REPO, ensure_pending, write_json, git_sha
 
 
-SYSTEM_PROMPT = """You are converting an IDRE platform report from TypeScript+Prisma source code into an equivalent raw MySQL query.
+SYSTEM_PROMPT = """You are converting an IDRE platform report from TypeScript+Prisma source code into an equivalent raw MySQL query that ACTUALLY EXECUTES.
 
 You will receive the contents of:
   (a) app/api/reports/<name>/route.ts — the Next.js route handler
   (b) (optional) lib/reports/<name>.ts — supporting library code
 
+HARD CONSTRAINTS on `sql_equivalent`:
+  1. Output ONE single SELECT statement. NO `SET @var = ...; SELECT ...` multi-statement.
+  2. Use ACTUAL MySQL table names (lowercase snake_case from Prisma `@@map`), NOT Prisma model names (PascalCase).
+     Examples: `case` (not `Case`), `payment` (not `Payment`), `case_payment_allocation` (not `CasePaymentAllocation` or `PaymentAllocation`).
+     If you don't know the table name for a model, set `needs_review: true` rather than guess.
+  3. NO template literal placeholders like `${startDate}` or `${var}`. Use hardcoded reasonable values (e.g., `'2026-01-01'`) and note them in `notes`.
+  4. NO SQLAlchemy-style `:param` placeholders. Use hardcoded values.
+  5. NO references to tables you cannot confirm exist in the schema. If a Prisma model named `Foo` is mentioned but you don't see `@@map("foo")` or similar, set `needs_review: true`.
+  6. NO `?` placeholders. Hardcode values.
+  7. Backtick `case` (MySQL reserved word). Backticking other table names is optional but consistent.
+
 Output a JSON object with these keys:
   - "prisma_query": the Prisma call(s) the route makes (verbatim, as a single TypeScript string)
-  - "js_postprocessing": any JS that runs AFTER the Prisma call (filter, map, reduce, .some(), .every(), aggregations). Empty string if none.
-  - "sql_equivalent": a MySQL SELECT that produces the same final result as the route after JS post-processing. Use backticks for `case` (reserved word). Inline the JS logic as SQL subqueries (NOT EXISTS, CASE WHEN, etc.) where applicable.
+  - "js_postprocessing": any JS that runs AFTER the Prisma call. Empty string if none.
+  - "sql_equivalent": a MySQL SELECT meeting the constraints above. Empty string if not translatable.
   - "result_shape": the JSON shape the route returns (top-level keys)
-  - "notes": one-sentence rationale; flag any logic you couldn't translate.
+  - "needs_review": boolean. TRUE if you cannot produce a clean executable SELECT (helper functions you can't translate, missing schema info, etc.). Be honest — better to flag than ship stubs.
+  - "notes": one-sentence rationale; if needs_review=true, explain WHY.
 
 Output ONLY the JSON object. No markdown, no commentary."""
 

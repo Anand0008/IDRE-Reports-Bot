@@ -34,9 +34,15 @@ for r in bl["reports"]:
     for model, table in mapping.items():
         # Replace backticked PascalCase model with backticked table_name
         new_sql = re.sub(rf"`{re.escape(model)}`", f"`{table}`", new_sql)
-        # Also replace unbacked: word boundaries around bare model name (used as table ref)
-        # only when followed by whitespace, dot, or end (so we don't rewrite column names that happen to match)
-        # Skip this — too risky. Stick to backticked.
+        # Bare (non-backticked) identifier — only rewrite in table position
+        # (after FROM/JOIN/UPDATE/INTO), with a word boundary, to avoid
+        # rewriting column names that happen to match a model name.
+        new_sql = re.sub(
+            rf"(\b(?:FROM|JOIN|UPDATE|INTO)\s+){re.escape(model)}\b",
+            rf"\1`{table}`",
+            new_sql,
+            flags=re.IGNORECASE,
+        )
     if new_sql != sql:
         changes += 1
         r["sql_equivalent"] = new_sql
