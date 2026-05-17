@@ -258,3 +258,147 @@ def run_derived_ui_test(
         bot_payload={"reduced": bot_dict, "raw": bot_raw_summary},
         expected_payload=ui_dict,
     )
+
+
+def run_derived_dom_test(
+    record: TestRecord,
+    bot_runner: Callable[[str, NowAnchor], dict],
+    page,
+    now_anchor: NowAnchor,
+) -> TestResult:
+    """Run a derived-dom test (count or rows variant).
+
+    count: validator extracts IDRE-side number, compare to bot's count.
+    rows:  bot returns >=N rows; runner picks `sample_count` IDs and navigates
+           IDRE per-row lookup URL, asserts expected text appears.
+    """
+    from testing.v10_harness.ui_validators import get as get_validator
+
+    with measure() as bot_m:
+        bot_raw = bot_runner(record.prompt, now_anchor)
+
+    bot_raw_summary = {
+        "sql": (bot_raw.get("sql") or "")[:500] if isinstance(bot_raw, dict) else None,
+        "data_preview": str(bot_raw.get("data"))[:300] if isinstance(bot_raw, dict) else None,
+        "row_count": bot_raw.get("row_count") if isinstance(bot_raw, dict) else None,
+    }
+
+    if record.result_type == "rows":
+        return _verify_rows(record, bot_raw, page, bot_m, bot_raw_summary)
+
+    # count flow -- reuse the reduction logic from derived-ui
+    bot_dict: dict[str, Any] = {}
+    data = bot_raw.get("data") if isinstance(bot_raw, dict) else bot_raw
+    if isinstance(data, list) and data and isinstance(data[0], dict):
+        first = data[0]
+        if len(record.bot_must_return_keys) == 1:
+            only_key = record.bot_must_return_keys[0]
+            if only_key in first:
+                bot_dict[only_key] = first[only_key]
+            else:
+                if len(data) > 1:
+                    bot_dict[only_key] = len(data)
+                else:
+                    vals = list(first.values())
+                    bot_dict[only_key] = vals[0] if vals else None
+        else:
+            for k in record.bot_must_return_keys:
+                bot_dict[k] = first.get(k)
+    elif isinstance(data, dict):
+        for k in record.bot_must_return_keys:
+            bot_dict[k] = data.get(k)
+        if len(record.bot_must_return_keys) == 1:
+            only_key = record.bot_must_return_keys[0]
+            if bot_dict.get(only_key) is None:
+                list_values = [v for v in data.values() if isinstance(v, list)]
+                if len(list_values) == 1:
+                    bot_dict[only_key] = len(list_values[0])
+
+    if not record.validator:
+        return TestResult(
+            record=record, verdict=Verdict.FAIL,
+            diffs=["derived-dom count record missing 'validator' field"],
+            bot_measurement=bot_m.to_dict(), harness_measurement={},
+            bot_payload={"reduced": bot_dict, "raw": bot_raw_summary},
+            expected_payload=None,
+        )
+
+    with measure() as ui_m:
+        validator = get_validator(record.validator)
+        ui_dict = validator.extract(page, record.validator_params)
+
+    cmp = compare_aggregates(bot_dict, ui_dict, float_tolerance=0.01)
+    return TestResult(
+        record=record, verdict=cmp.verdict, diffs=cmp.diff,
+        bot_measurement=bot_m.to_dict(), harness_measurement=ui_m.to_dict(),
+        bot_payload={"reduced": bot_dict, "raw": bot_raw_summary},
+        expected_payload=ui_dict,
+    )
+
+
+def _verify_rows(record, bot_raw, page, bot_m, bot_raw_summary) -> TestResult:
+    """rows-type validation: bot returned rows, sample N, verify in IDRE."""
+    data = bot_raw.get("data") if isinstance(bot_raw, dict) else bot_raw
+    if not isinstance(data, list):
+        # bot returned dict (e.g., {cases: [...]}) -- unwrap if single list value
+        if isinstance(data, dict):
+            list_vals = [v for v in data.values() if isinstance(v, list)]
+            if len(list_vals) == 1:
+                data = list_vals[0]
+
+    if not isinstance(data, list) or len(data) == 0:
+        return TestResult(
+            record=record, verdict=Verdict.FAIL,
+            diffs=[f"rows-test expected list of rows from bot; got: {type(data).__name__} len={len(data) if hasattr(data, '__len__') else 'n/a'}"],
+            bot_measurement=bot_m.to_dict(), harness_measurement={},
+            bot_payload={"reduced": None, "raw": bot_raw_summary},
+            expected_payload=None,
+        )
+
+    params = record.validator_params or {}
+    id_column = params.get("id_column", "disputeReferenceNumber")
+    sample_count = int(params.get("sample_count", 1))
+    lookup_template = params["lookup_url_template"]
+    expected_pattern = params["expected_text_pattern"]
+
+    samples = data[:sample_count]
+    # Ensure each row has the id_column
+    sampled_ids = []
+    for row in samples:
+        if not isinstance(row, dict) or id_column not in row:
+            return TestResult(
+                record=record, verdict=Verdict.FAIL,
+                diffs=[f"row missing id_column {id_column!r}; row keys={list(row.keys()) if isinstance(row, dict) else 'not-a-dict'}"],
+                bot_measurement=bot_m.to_dict(), harness_measurement={},
+                bot_payload={"reduced": None, "raw": bot_raw_summary},
+                expected_payload=None,
+            )
+        sampled_ids.append(row[id_column])
+
+    diffs = []
+    verified = []
+    with measure() as ui_m:
+        for sample_id in sampled_ids:
+            lookup_url = lookup_template.format(id=sample_id)
+            try:
+                page.goto(lookup_url, wait_until="domcontentloaded", timeout=60000)
+                page.wait_for_function(
+                    f"() => /{expected_pattern}/.test(document.body.innerText)",
+                    timeout=30000,
+                )
+                verified.append(sample_id)
+            except Exception as exc:
+                diffs.append(f"row {sample_id!r} lookup FAILED at {lookup_url}: {type(exc).__name__}: {str(exc)[:200]}")
+
+    verdict = Verdict.PASS if len(verified) == len(sampled_ids) else Verdict.FAIL
+    return TestResult(
+        record=record, verdict=verdict, diffs=diffs,
+        bot_measurement=bot_m.to_dict(), harness_measurement=ui_m.to_dict(),
+        bot_payload={
+            "rows_count": len(data),
+            "sampled_ids": sampled_ids,
+            "verified_ids": verified,
+            "raw": bot_raw_summary,
+        },
+        expected_payload={"lookup_url_template": lookup_template, "expected_pattern": expected_pattern},
+    )
