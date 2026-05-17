@@ -32,7 +32,9 @@ testing/v10_harness/**/__pycache__/
 extract_docx.py
 scripts/*
 !scripts/build_knowledge/
+!scripts/snapshot/
 scripts/build_knowledge/__pycache__/
+scripts/snapshot/__pycache__/
 
 # IDE
 .vscode/
