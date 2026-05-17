@@ -51,3 +51,46 @@ def idre_session() -> requests.Session:
 def now_anchor(staging_engine: Engine):
     from testing.v10_harness.temporality import NowAnchor
     return NowAnchor.lock_from_db(staging_engine)
+
+
+# ── Playwright fixtures (derived-ui category) ──────────────────────────────
+
+@pytest.fixture(scope="session")
+def playwright_browser():
+    """Session-scoped headless Chromium for derived-ui tests."""
+    from playwright.sync_api import sync_playwright
+    p = sync_playwright().start()
+    browser = p.chromium.launch(headless=True)
+    try:
+        yield browser
+    finally:
+        browser.close()
+        p.stop()
+
+
+@pytest.fixture(scope="session")
+def playwright_page(playwright_browser, idre_session):
+    """Session-scoped Playwright page sharing IDRE auto-login cookies.
+
+    Transfers cookies from the requests-based idre_session into the
+    Playwright browser context, then verifies authenticated load of /dashboard.
+    Validators reuse this page across tests to avoid per-test login cost.
+    """
+    ctx = playwright_browser.new_context()
+    cookies = []
+    for c in idre_session.cookies:
+        cookies.append({
+            "name": c.name,
+            "value": c.value,
+            "domain": c.domain or "127.0.0.1",
+            "path": c.path or "/",
+        })
+    if cookies:
+        ctx.add_cookies(cookies)
+    page = ctx.new_page()
+    try:
+        page.goto("http://127.0.0.1:3000/dashboard",
+                  wait_until="domcontentloaded", timeout=60000)
+        yield page
+    finally:
+        ctx.close()
