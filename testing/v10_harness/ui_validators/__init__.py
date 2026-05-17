@@ -19,3 +19,4 @@ def get(name: str):
 
 # Import side-effects register each validator in REGISTRY
 from . import dashboard_stats  # noqa: E402,F401
+from . import case_status_filter  # noqa: E402,F401
