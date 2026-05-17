@@ -1,0 +1,24 @@
+{
+  "id": "K_team_001",
+  "category": "known-report",
+  "verdict": "PASS",
+  "diffs": [],
+  "bot_measurement": {
+    "latency_ms": 10562.0,
+    "tokens": {
+      "prompt": 0,
+      "completion": 0,
+      "total": 0
+    },
+    "llm_calls": 0
+  },
+  "harness_measurement": {
+    "latency_ms": 719.0,
+    "tokens": {
+      "prompt": 0,
+      "completion": 0,
+      "total": 0
+    },
+    "llm_calls": 0
+  }
+}
