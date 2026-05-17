@@ -16,7 +16,23 @@ for m in schema.get("models", []):
     if model and table and model != table:
         mapping[model] = table
 
-print(f"Building mapping for {len(mapping)} model->table renames")
+# Hand-curated aliases for tables Gemini hallucinated (not Prisma model names).
+# These are NOT in schema_catalog as models — they're guesses Gemini made
+# from English nouns or incomplete schema knowledge.
+HAND_ALIASES = {
+    "party": "case_party",
+    "Party": "case_party",
+    "dispute_line_item": "dispute_line_items",   # actual table is plural
+    "DisputeLineItem": "dispute_line_items",
+    "PaymentAllocation": "case_payment_allocation",
+    "CaseAllocation": "case_payment_allocation",
+    # installment: feature doesn't exist on staging — Gemini hallucinated it.
+    # Leaving unmapped so validation fails loudly for due-dates/summary.
+}
+for k, v in HAND_ALIASES.items():
+    mapping[k] = v
+
+print(f"Building mapping for {len(mapping)} model->table renames ({len(HAND_ALIASES)} hand aliases)")
 for k, v in sorted(mapping.items())[:5]:
     print(f"  `{k}` -> `{v}`")
 if len(mapping) > 5:
